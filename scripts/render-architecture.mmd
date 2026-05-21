@@ -1,0 +1,38 @@
+flowchart TB
+  user["End user"] --> r53["Route53 hosted zone"]
+  r53 --> alb["AWS ALB"]
+  alb --> ta["tenant-a namespace"]
+  alb --> tb["tenant-b namespace"]
+  alb --> tc["tenant-c namespace"]
+
+  subgraph eks["EKS cluster: private spot nodes"]
+    subgraph ta["tenant-a namespace"]
+      apiA["feedback-api"]
+      dbA["Postgres StatefulSet"]
+      apiA --> dbA
+    end
+    subgraph tb["tenant-b namespace"]
+      apiB["feedback-api"]
+      dbB["Postgres StatefulSet"]
+      apiB --> dbB
+    end
+    subgraph tc["tenant-c namespace"]
+      apiC["feedback-api"]
+      dbC["Postgres StatefulSet"]
+      apiC --> dbC
+    end
+    prom["Prometheus"]
+    graf["Grafana"]
+    falco["Falco"]
+    argo["ArgoCD"]
+  end
+
+  argo --> git["tenant-sandbox-manifests"]
+  prom --> apiA
+  prom --> apiB
+  prom --> apiC
+  prom --> graf
+  apiA --> s3a["tenant-a S3 exports via IRSA"]
+  apiB --> s3b["tenant-b S3 exports via IRSA"]
+  apiC --> s3c["tenant-c S3 exports via IRSA"]
+

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-api
+  namespace: {{ .Values.tenantName }}
+  labels:
+    {{- include "feedback-api.labels" . | nindent 4 }}
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: feedback-api
+    tenant: {{ .Values.tenantName }}
+

@@ -1,0 +1,20 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: feedback-api
+  namespace: {{ .Values.tenantName }}
+  labels:
+    release: monitoring
+    tenant: {{ .Values.tenantName }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: feedback-api
+      tenant: {{ .Values.tenantName }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+{{- end }}
+

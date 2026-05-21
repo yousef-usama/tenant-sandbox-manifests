@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenants
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  generators:
+    - list:
+        elements:
+          - tenant: tenant-a
+          - tenant: tenant-b
+          - tenant: tenant-c
+  template:
+    metadata:
+      name: '{{tenant}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_GITHUB_USER/tenant-sandbox-manifests.git
+        targetRevision: main
+        path: apps/feedback-api/chart
+        helm:
+          valueFiles:
+            - values/{{tenant}}.yaml
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{tenant}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+

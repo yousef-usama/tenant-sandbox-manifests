@@ -1,0 +1,60 @@
+name: app-release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/feedback-api/**"
+      - ".github/workflows/app-release.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  AWS_REGION: eu-central-1
+  IMAGE_NAME: tenant-sandbox/feedback-api
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/feedback-api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/feedback-api/go.mod
+          cache-dependency-path: apps/feedback-api/go.sum
+      - run: go test ./...
+      - run: docker build -t ${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - run: docker push ${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+      - uses: mikefarah/yq@v4.44.3
+      - name: Bump tenant image tags
+        working-directory: .
+        run: |
+          for tenant in tenant-a tenant-b tenant-c; do
+            yq -i '.image.tag = strenv(GITHUB_SHA)' apps/feedback-api/chart/values/${tenant}.yaml
+            yq -i '.image.repository = "${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}"' apps/feedback-api/chart/values/${tenant}.yaml
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/feedback-api/chart/values
+          git diff --cached --quiet || git commit -m "chore: bump feedback-api image to ${GITHUB_SHA}"
+          git push

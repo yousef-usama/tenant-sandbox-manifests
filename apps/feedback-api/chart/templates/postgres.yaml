@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-postgres
+  namespace: {{ .Values.tenantName }}
+  labels:
+    app: feedback-postgres
+    tenant: {{ .Values.tenantName }}
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: feedback-postgres
+    tenant: {{ .Values.tenantName }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: feedback-postgres
+  namespace: {{ .Values.tenantName }}
+spec:
+  serviceName: feedback-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: feedback-postgres
+      tenant: {{ .Values.tenantName }}
+  template:
+    metadata:
+      labels:
+        app: feedback-postgres
+        tenant: {{ .Values.tenantName }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: feedback-postgres
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+

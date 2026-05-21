@@ -1,0 +1,36 @@
+name: app-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/feedback-api/**"
+      - ".github/workflows/app-ci.yml"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test-build-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/feedback-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/feedback-api/go.mod
+          cache-dependency-path: apps/feedback-api/go.sum
+      - run: go test ./...
+      - run: docker build -t feedback-api:${{ github.sha }} .
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: feedback-api:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: azure/setup-helm@v4
+      - run: helm lint chart
+      - run: helm template tenant-a chart -f chart/values/tenant-a.yaml
+

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://falcosecurity.github.io/charts
+    chart: falco
+    targetRevision: 4.8.3
+    helm:
+      values: |
+        falco:
+          rules_files:
+            - /etc/falco/falco_rules.yaml
+            - /etc/falco/rules.d
+          jsonOutput: true
+        customRules:
+          tenant-shell.yaml: |-
+            - rule: Shell Opened In Tenant Pod
+              desc: Detect shell execution inside tenant namespaces
+              condition: spawned_process and container and k8s.ns.name startswith "tenant-" and proc.name in (bash, sh, zsh, ash)
+              output: Shell opened in tenant pod (user=%user.name command=%proc.cmdline namespace=%k8s.ns.name pod=%k8s.pod.name)
+              priority: WARNING
+              tags: [tenant, shell]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

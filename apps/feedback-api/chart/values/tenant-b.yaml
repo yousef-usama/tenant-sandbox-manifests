@@ -1,0 +1,8 @@
+tenantName: tenant-b
+domainName: your-domain.click
+postgres:
+  password: replace-with-external-secret-later
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/tenant-sandbox-tenant-b-app
+
