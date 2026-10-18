@@ -7,5 +7,5 @@ serviceAccount:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::339712755065:role/tenant-sandbox-tenant-a-app
 image:
-  tag: a470f2d642984309a9696adc6873059be56bfcf2
+  tag: 3901a70aa8ca939e9c688d57204e19c9e8534b0e
   repository: 339712755065.dkr.ecr.eu-central-1.amazonaws.com/tenant-sandbox/feedback-api
