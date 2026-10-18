@@ -21,7 +21,7 @@ api:
       memory: 256Mi
 
 postgres:
-  image: postgres:16-alpine
+  image: postgres:16
   storage: 1Gi
   storageClassName: gp3
   database: feedback

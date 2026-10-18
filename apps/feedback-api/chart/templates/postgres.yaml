@@ -46,6 +46,9 @@ spec:
           ports:
             - containerPort: 5432
               name: postgres
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           envFrom:
             - secretRef:
                 name: feedback-postgres
@@ -58,7 +61,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
-              subPath: postgres
+            - name: run
+              mountPath: /var/run/postgresql
+      volumes:
+        - name: run
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
