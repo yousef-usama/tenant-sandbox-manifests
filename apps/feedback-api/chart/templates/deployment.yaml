@@ -32,6 +32,8 @@ spec:
           env:
             - name: TENANT_NAME
               value: {{ .Values.tenantName | quote }}
+            - name: EXPORT_BUCKET
+              value: {{ .Values.exportBucket | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -51,4 +53,3 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-

@@ -13,15 +13,18 @@ spec:
     targetRevision: 1.15.0
     helm:
       values: |
-        provider: aws
+        provider:
+          name: aws
         policy: sync
         registry: txt
         txtOwnerId: tenant-sandbox
         domainFilters:
-          - your-domain.click
+          - yousef-usama-cloud.click
         serviceAccount:
+          create: true
+          name: external-dns
           annotations:
-            eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/tenant-sandbox-external-dns
+            eks.amazonaws.com/role-arn: arn:aws:iam::339712755065:role/tenant-sandbox-external-dns
   destination:
     server: https://kubernetes.default.svc
     namespace: external-dns

@@ -1,8 +1,8 @@
 tenantName: tenant-a
-domainName: your-domain.click
+domainName: yousef-usama-cloud.click
 
 image:
-  repository: ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/tenant-sandbox/feedback-api
+  repository: 339712755065.dkr.ecr.eu-central-1.amazonaws.com/tenant-sandbox/feedback-api
   tag: local
   pullPolicy: IfNotPresent
 
@@ -23,9 +23,10 @@ api:
 postgres:
   image: postgres:16-alpine
   storage: 1Gi
+  storageClassName: gp3
   database: feedback
   username: feedback
-  password: change-me-demo-password
+  secretKey: tenant-sandbox/tenant-a/postgres
   resources:
     requests:
       cpu: 50m
@@ -34,11 +35,24 @@ postgres:
       cpu: 500m
       memory: 512Mi
 
+exportBucket: tenant-sandbox-tenant-a-exports
+
 ingress:
   enabled: true
-  certificateIssuer: letsencrypt-staging
+  groupName: tenant-sandbox
+  allowedCidrs:
+    # Public VPC subnets only. Do not use the VPC CIDR: it contains tenant Pod IPs.
+    - 10.40.0.0/24
+    - 10.40.1.0/24
+    - 10.40.2.0/24
+
+egress:
+  endpointCidrs:
+    # Private VPC subnets containing interface VPC endpoints (STS, ECR, CloudWatch Logs).
+    - 10.40.10.0/24
+    - 10.40.11.0/24
+    - 10.40.12.0/24
 
 monitoring:
   serviceMonitor:
     enabled: true
-

@@ -1,8 +1,8 @@
 tenantName: tenant-a
-domainName: your-domain.click
+domainName: yousef-usama-cloud.click
+exportBucket: tenant-sandbox-tenant-a-exports
 postgres:
-  password: replace-with-external-secret-later
+  secretKey: tenant-sandbox/tenant-a/postgres
 serviceAccount:
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/tenant-sandbox-tenant-a-app
-
+    eks.amazonaws.com/role-arn: arn:aws:iam::339712755065:role/tenant-sandbox-tenant-a-app

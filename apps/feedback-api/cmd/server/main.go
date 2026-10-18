@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -18,8 +21,10 @@ import (
 )
 
 type server struct {
-	db     *sql.DB
-	tenant string
+	db           *sql.DB
+	tenant       string
+	exportBucket string
+	s3           *s3.Client
 }
 
 type item struct {
@@ -77,17 +82,32 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s := &server{db: db, tenant: tenant}
+	s := &server{db: db, tenant: tenant, exportBucket: os.Getenv("EXPORT_BUCKET")}
+	if s.exportBucket != "" {
+		awsConfig, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			log.Fatalf("load AWS configuration: %v", err)
+		}
+		s.s3 = s3.NewFromConfig(awsConfig)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", s.instrument("healthz", http.HandlerFunc(s.healthz)))
 	mux.Handle("POST /items", s.instrument("create_item", http.HandlerFunc(s.createItem)))
 	mux.Handle("GET /items", s.instrument("list_items", http.HandlerFunc(s.listItems)))
 	mux.Handle("POST /items/{id}/vote", s.instrument("vote", http.HandlerFunc(s.vote)))
 	mux.Handle("GET /results", s.instrument("results", http.HandlerFunc(s.results)))
+	mux.Handle("POST /exports", s.instrument("export", http.HandlerFunc(s.export)))
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	log.Printf("feedback API listening on :%s for tenant %s", port, tenant)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
+}
+
+type result struct {
+	ItemID       int64   `json:"item_id"`
+	Name         string  `json:"name"`
+	Votes        int64   `json:"votes"`
+	AverageScore float64 `json:"average_score"`
 }
 
 func migrate(ctx context.Context, db *sql.DB) error {
@@ -112,6 +132,10 @@ CREATE TABLE IF NOT EXISTS votes (
 }
 
 func (s *server) healthz(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("database not connected"))
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if err := s.db.PingContext(ctx); err != nil {
@@ -196,36 +220,77 @@ func (s *server) vote(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) results(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.QueryContext(r.Context(), `
+	results, err := s.queryResults(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.refreshUniqueVoters(r.Context())
+	writeJSON(w, http.StatusOK, results)
+}
+
+func (s *server) queryResults(ctx context.Context) ([]result, error) {
+	rows, err := s.db.QueryContext(ctx, `
 SELECT i.id, i.name, COUNT(v.id), COALESCE(AVG(v.score), 0)
 FROM items i
 LEFT JOIN votes v ON v.item_id = i.id
 GROUP BY i.id, i.name
 ORDER BY i.id`)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
-	type result struct {
-		ItemID       int64   `json:"item_id"`
-		Name         string  `json:"name"`
-		Votes        int64   `json:"votes"`
-		AverageScore float64 `json:"average_score"`
-	}
 	results := []result{}
 	for rows.Next() {
 		var res result
 		if err := rows.Scan(&res.ItemID, &res.Name, &res.Votes, &res.AverageScore); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
+			return nil, err
 		}
 		results = append(results, res)
 	}
-	s.refreshUniqueVoters(r.Context())
-	writeJSON(w, http.StatusOK, results)
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
+
+func (s *server) export(w http.ResponseWriter, r *http.Request) {
+	if s.s3 == nil || s.exportBucket == "" {
+		writeError(w, http.StatusServiceUnavailable, errors.New("S3 export is not configured"))
+		return
+	}
+
+	results, err := s.queryResults(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	payload, err := json.Marshal(struct {
+		Tenant   string    `json:"tenant"`
+		Exported time.Time `json:"exported_at"`
+		Results  []result  `json:"results"`
+	}{Tenant: s.tenant, Exported: time.Now().UTC(), Results: results})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	key := "exports/" + time.Now().UTC().Format("20060102T150405.000000000Z") + ".json"
+	if _, err := s.s3.PutObject(r.Context(), &s3.PutObjectInput{
+		Bucket:      &s.exportBucket,
+		Key:         &key,
+		Body:        bytes.NewReader(payload),
+		ContentType: stringPtr("application/json"),
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"key": key, "s3_uri": "s3://" + s.exportBucket + "/" + key})
+}
+
+func stringPtr(value string) *string { return &value }
 
 func (s *server) refreshUniqueVoters(ctx context.Context) {
 	var count float64

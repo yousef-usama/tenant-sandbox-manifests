@@ -1,21 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cert-issuers
+  name: grafana-dashboards
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_GITHUB_USER/tenant-sandbox-manifests.git
+    repoURL: https://github.com/yousef-usama/tenant-sandbox-manifests.git
     targetRevision: main
-    path: platform/cert-manager
+    path: platform/monitoring/dashboards
   destination:
     server: https://kubernetes.default.svc
-    namespace: cert-manager
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-

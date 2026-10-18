@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_GITHUB_USER/tenant-sandbox-manifests.git
+    repoURL: https://github.com/yousef-usama/tenant-sandbox-manifests.git
     targetRevision: main
     path: argocd/apps
     directory:
@@ -20,4 +20,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-

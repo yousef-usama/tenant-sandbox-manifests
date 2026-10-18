@@ -13,4 +13,4 @@ curl -fsS -X POST "$base_url/items/$item_id/vote" \
   -d '{"voter_id":"demo-user-1","score":5,"comment":"works"}'
 
 curl -fsS "$base_url/results"
-
+curl -fsS -X POST "$base_url/exports"

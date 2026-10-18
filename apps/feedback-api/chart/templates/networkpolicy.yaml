@@ -23,7 +23,17 @@ spec:
     - Egress
   ingress:
     - from:
-        - namespaceSelector: {}
+        {{- range .Values.ingress.allowedCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.port }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
           port: {{ .Values.api.port }}
@@ -49,6 +59,10 @@ spec:
             cidr: 0.0.0.0/0
             except:
               - 10.40.0.0/16
+        {{- range .Values.egress.endpointCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: 443
@@ -73,4 +87,3 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-
