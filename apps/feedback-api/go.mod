@@ -1,6 +1,6 @@
 module github.com/yousef-usama/tenant-sandbox-manifests/apps/feedback-api
 
-go 1.22
+go 1.27
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.26
