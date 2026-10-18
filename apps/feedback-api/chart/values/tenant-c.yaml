@@ -6,3 +6,6 @@ postgres:
 serviceAccount:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::339712755065:role/tenant-sandbox-tenant-c-app
+image:
+  tag: 87c7be4b2e5824243a9a9ec394709fd4b98c7941
+  repository: 339712755065.dkr.ecr.eu-central-1.amazonaws.com/tenant-sandbox/feedback-api
