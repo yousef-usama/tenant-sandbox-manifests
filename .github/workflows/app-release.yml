@@ -38,7 +38,7 @@ jobs:
           cache-dependency-path: apps/feedback-api/go.sum
       - run: go test ./...
       - run: docker build -t ${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-      - uses: aquasecurity/trivy-action@0.24.0
+      - uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: ${{ steps.ecr.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           severity: HIGH,CRITICAL
