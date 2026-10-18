@@ -309,3 +309,150 @@ $ gh run list -R yousef-usama/tenant-sandbox-manifests --json databaseId,status,
 | **Database** | In-Cluster PostgreSQL StatefulSets with EBS `gp3` volumes | Storage only (~$0.08/GB) | Avoids RDS minimum cluster charges while demonstrating stateful workloads on Kubernetes. |
 | **Security** | Falco eBPF + NetworkPolicy + PodSecurity Admission | Open Source / Built-in | Enterprise-grade runtime, network, and admission control at zero additional software cost. |
 | **Secrets** | External Secrets Operator + AWS Secrets Manager | Pay-per-secret API call | Centralized AWS credential lifecycle without in-repo secrets. |
+
+---
+
+## 8. Troubleshooting Log: Production Failures, Root Cause & Fixes
+
+During the initial deployment and hardening of the multi-tenant cluster, several edge cases were uncovered and resolved. Below are the actual failure logs, root causes, and resolutions.
+
+### 8.1 GitHub Actions OIDC Authentication Block
+
+**Failure Log**:
+```text
+Run aws-actions/configure-aws-credentials@v4
+Error: Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+An error occurred (AccessDenied) when calling the AssumeRoleWithWebIdentity operation: 
+Subject does not match trust policy.
+```
+
+**Root Cause**: GitHub Actions mints tokens with organizational numeric IDs:
+`repo:yousef-usama@267386812/tenant-sandbox-manifests@1424586265:ref:refs/heads/main`
+The IAM trust policy's `StringEquals` condition strictly checked for `repo:yousef-usama/tenant-sandbox-manifests:*`.
+
+**Remediation**:
+```json
+"Condition": {
+  "StringLike": {
+    "token.actions.githubusercontent.com:sub": "repo:yousef-usama*tenant-sandbox-manifests*:*"
+  }
+}
+```
+
+---
+
+### 8.2 Trivy Security Scanner CI Failure
+
+**Failure Log**:
+```text
+2026-10-18T18:47:12.839Z FATAL scan error: 
+Image: 339712755065.dkr.ecr.eu-central-1.amazonaws.com/tenant-sandbox/feedback-api:tmp
+Total: 3 (HIGH: 2, CRITICAL: 1)
+┌───────────────┬────────────────┬──────────┬────────┬───────────────────┬───────────────┐
+│    Package    │ Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │
+├───────────────┼────────────────┼──────────┼────────┼───────────────────┼───────────────┤
+│ stdlib (Go)   │ CVE-2024-24790 │ CRITICAL │ fixed  │ 1.22.5            │ 1.22.6        │
+│ stdlib (Go)   │ CVE-2024-34156 │ HIGH     │ fixed  │ 1.22.5            │ 1.22.7        │
+│ stdlib (Go)   │ CVE-2024-34158 │ HIGH     │ fixed  │ 1.22.5            │ 1.22.7        │
+└───────────────┴────────────────┴──────────┴────────┴───────────────────┴───────────────┘
+Error: Process completed with exit code 1.
+```
+
+**Root Cause**: The container builder stage in `Dockerfile` referenced `golang:1.22`, which embedded vulnerable Go standard library packages into the static binary.
+
+**Remediation**: Upgraded Dockerfile builder to `golang:1.27.2-bookworm` and updated `go.mod` to Go 1.27. Rerun succeeded with 0 vulnerabilities detected.
+
+---
+
+### 8.3 Kubelet Non-Root Verification on Distroless Image
+
+**Failure Log**:
+```text
+$ kubectl get pods -n tenant-a
+NAME                            READY   STATUS                       RESTARTS   AGE
+feedback-api-5c94877456-7qbl8   0/1     CreateContainerConfigError   0          14s
+
+$ kubectl describe pod feedback-api-5c94877456-7qbl8 -n tenant-a
+Events:
+  Warning  Failed     12s (x2 over 14s)  kubelet  Error: container has runAsNonRoot and image has non-numeric user (nonroot), cannot verify user is non-root (pod: "feedback-api-...", container: "feedback-api")
+```
+
+**Root Cause**: `gcr.io/distroless/static-debian12:nonroot` contains no `/etc/passwd`. Kubelet cannot resolve the username `nonroot` to verify non-root status unless an explicit integer UID is supplied.
+
+**Remediation**: Added numeric UID/GID definitions in `deployment.yaml`:
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+```
+
+---
+
+### 8.4 PostgreSQL Storage Permissions & CrashLoopBackOff
+
+**Failure Log**:
+```text
+$ kubectl get pods -n tenant-a
+NAME                  READY   STATUS             RESTARTS      AGE
+feedback-postgres-0   0/1     CrashLoopBackOff   3 (45s ago)   2m
+
+$ kubectl logs -n tenant-a feedback-postgres-0
+initdb: error: could not access directory "/var/lib/postgresql/data": Permission denied
+chmod: changing permissions of '/var/run/postgresql': Permission denied
+```
+
+**Root Cause**: AWS EBS volumes are formatted with `root:root (0:0)` root permissions and an empty `lost+found` folder. PostgreSQL (running as non-root UID 999) cannot run `initdb` directly at the mount root, and Alpine vs Debian UID mismatch caused permissions issues.
+
+**Remediation**:
+1. Switched container image from `postgres:16-alpine` (UID 70) to `postgres:16` (UID 999).
+2. Set `PGDATA` to `/var/lib/postgresql/data/pgdata` (subfolder created by postgres).
+3. Mounted an `emptyDir` volume at `/var/run/postgresql` for unprivileged socket writes.
+
+---
+
+### 8.5 Prometheus CRDs Client-Side Apply Annotation Overflow
+
+**Failure Log**:
+```text
+$ kubectl apply -f platform/monitoring/crds/
+CustomResourceDefinition.apiextensions.k8s.io "prometheuses.monitoring.coreos.com" is invalid: 
+metadata.annotations: Too long: must have at most 262144 bytes
+```
+
+**Root Cause**: Client-side apply stores the full manifest JSON in `kubectl.kubernetes.io/last-applied-configuration`, exceeding Kubernetes' 256 KB annotation ceiling.
+
+**Remediation**: Applied CRDs using Server-Side Apply:
+```bash
+kubectl apply --server-side --force-conflicts -f platform/monitoring/crds/
+```
+And enabled `ServerSideApply=true` in ArgoCD's `monitoring` application sync options.
+
+---
+
+### 8.6 Falco eBPF Driver Compatibility on AL2023 Kernel
+
+**Failure Log**:
+```text
+$ kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco
+Fri Oct 18 17:15:21 2026: Runtime error: scap_init: can't load modern BPF probe on kernel 6.1.176-221.360.amzn2023.x86_64
+Fri Oct 18 17:15:21 2026: Exiting...
+```
+
+**Root Cause**: Falco chart 0.38 modern BPF driver was not pre-compiled for Amazon Linux 2023's 6.1 kernel.
+
+**Remediation**: Bumped Falco Helm chart to `9.2.0` (Falco engine `0.45.0`), which natively bundles updated modern eBPF probes for 6.x kernels.
+
+---
+
+### 8.7 AWS Load Balancer Controller ACM Discovery AccessDenied
+
+**Failure Log**:
+```text
+{"level":"error","ts":"2026-10-18T18:08:42Z","logger":"controllers.ingress","msg":"Reconciler error",
+"error":"AccessDenied: User: arn:aws:sts::339712755065:assumed-role/tenant-sandbox-aws-lb-controller/aws-load-balancer-controller is not authorized to perform: acm:DescribeCertificate on resource: arn:aws:acm:eu-central-1:339712755065:certificate/a1dbc96c-1650-4f1c-8837-7e7a291be2b2"}
+```
+
+**Root Cause**: The IAM policy bound to the AWS Load Balancer Controller service account omitted `acm:DescribeCertificate` and `acm:ListCertificates`.
+
+**Remediation**: Updated `modules/bootstrap-addons/policies/aws-load-balancer-controller.json` to the full AWS LBC v2.8+ policy and updated the IAM policy in AWS.
