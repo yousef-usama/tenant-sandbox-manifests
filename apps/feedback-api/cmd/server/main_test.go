@@ -209,3 +209,52 @@ func TestWriteError(t *testing.T) {
 		t.Fatalf("expected 'resource not found', got %q", res["error"])
 	}
 }
+
+func TestServeUI(t *testing.T) {
+	s := &server{tenant: "tenant-a"}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	s.serveUI(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("expected Content-Type text/html; charset=utf-8, got %q", ct)
+	}
+	if len(rec.Body.Bytes()) == 0 {
+		t.Fatal("expected non-empty HTML body")
+	}
+}
+
+func TestCORSMiddleware(t *testing.T) {
+	dummy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := corsMiddleware(dummy)
+
+	// Test OPTIONS preflight
+	optReq := httptest.NewRequest(http.MethodOptions, "/items", nil)
+	optRec := httptest.NewRecorder()
+	handler.ServeHTTP(optRec, optReq)
+
+	if optRec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204 No Content for OPTIONS, got %d", optRec.Code)
+	}
+	if origin := optRec.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+		t.Fatalf("expected Access-Control-Allow-Origin: *, got %q", origin)
+	}
+
+	// Test regular GET
+	getReq := httptest.NewRequest(http.MethodGet, "/results", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", getRec.Code)
+	}
+	if origin := getRec.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+		t.Fatalf("expected Access-Control-Allow-Origin: *, got %q", origin)
+	}
+}

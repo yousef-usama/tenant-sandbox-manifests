@@ -11,12 +11,19 @@ metadata:
     alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- if .Values.ingress.includeApexDomain }}
+    external-dns.alpha.kubernetes.io/hostname: {{ printf "%s.%s, %s" .Values.tenantName .Values.domainName .Values.domainName | quote }}
+    {{- else }}
     external-dns.alpha.kubernetes.io/hostname: {{ printf "%s.%s" .Values.tenantName .Values.domainName | quote }}
+    {{- end }}
 spec:
   ingressClassName: alb
   tls:
     - hosts:
         - {{ .Values.tenantName }}.{{ .Values.domainName }}
+        {{- if .Values.ingress.includeApexDomain }}
+        - {{ .Values.domainName }}
+        {{- end }}
       secretName: feedback-api-tls
   rules:
     - host: {{ .Values.tenantName }}.{{ .Values.domainName }}
@@ -29,4 +36,16 @@ spec:
                 name: feedback-api
                 port:
                   name: http
+    {{- if .Values.ingress.includeApexDomain }}
+    - host: {{ .Values.domainName }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: feedback-api
+                port:
+                  name: http
+    {{- end }}
 {{- end }}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"log"
@@ -60,6 +61,9 @@ var (
 		Name: "feedback_unique_voters",
 		Help: "Unique voters observed by tenant.",
 	}, []string{"tenant"})
+
+	//go:embed index.html
+	indexHTML []byte
 )
 
 func main() {
@@ -91,6 +95,7 @@ func main() {
 		s.s3 = s3.NewFromConfig(awsConfig)
 	}
 	mux := http.NewServeMux()
+	mux.Handle("GET /{$}", s.instrument("ui", http.HandlerFunc(s.serveUI)))
 	mux.Handle("GET /healthz", s.instrument("healthz", http.HandlerFunc(s.healthz)))
 	mux.Handle("POST /items", s.instrument("create_item", http.HandlerFunc(s.createItem)))
 	mux.Handle("GET /items", s.instrument("list_items", http.HandlerFunc(s.listItems)))
@@ -99,8 +104,29 @@ func main() {
 	mux.Handle("POST /exports", s.instrument("export", http.HandlerFunc(s.export)))
 	mux.Handle("GET /metrics", promhttp.Handler())
 
+	handler := corsMiddleware(mux)
+
 	log.Printf("feedback API listening on :%s for tenant %s", port, tenant)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	log.Fatal(http.ListenAndServe(":"+port, handler))
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) serveUI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(indexHTML)
 }
 
 type result struct {

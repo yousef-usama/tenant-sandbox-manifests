@@ -40,6 +40,7 @@ exportBucket: tenant-sandbox-tenant-a-exports
 ingress:
   enabled: true
   groupName: tenant-sandbox
+  includeApexDomain: false
   allowedCidrs:
     # Public VPC subnets only. Do not use the VPC CIDR: it contains tenant Pod IPs.
     - 10.40.0.0/24
