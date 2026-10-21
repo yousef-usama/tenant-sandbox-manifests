@@ -14,6 +14,19 @@ This repo owns:
 
 The infra repo owns AWS infrastructure and bootstraps only AWS Load Balancer Controller plus ArgoCD.
 
+## Tool Selection Rationale
+
+| Tool | Why It Was Chosen |
+| :--- | :--- |
+| **External Secrets Operator (ESO)** | ESO was chosen because AWS Secrets Manager was the native key store for the AWS-first architecture. ESO bridges Kubernetes-native Secrets with AWS Secrets Manager using IRSA-authenticated `ClusterSecretStore`, eliminating in-repo credentials entirely. |
+| **ArgoCD (App-of-Apps)** | Declarative GitOps reconciliation with sync waves enables ordered, reproducible platform bootstrapping from a single `root-app.yaml`. |
+| **AWS ALB Ingress Controller** | Native integration with AWS ALB for host-based multi-tenant routing on a single shared load balancer, with ACM certificate auto-discovery. |
+| **Prometheus + Grafana** | Industry-standard open-source observability stack with native Kubernetes ServiceMonitor CRDs for per-tenant metric collection. |
+| **Falco (eBPF)** | Kernel-level runtime threat detection using eBPF system call tracing. Detects shell execution and unauthorized process activity inside tenant pods in real time. |
+| **ExternalDNS** | Automated Route 53 DNS record management driven by Kubernetes Ingress annotations — no manual DNS configuration required. |
+| **cert-manager** | Available for future in-cluster certificate use cases (internal mTLS, webhook certificates), though ALB TLS termination uses ACM certificates directly. |
+| **VPC CNI NetworkPolicy** | Native AWS VPC CNI network policy enforcement without a third-party CNI. Enables strict default-deny and per-tenant allow rules. |
+
 ## Tenant Model
 
 The demo uses three tenants:
