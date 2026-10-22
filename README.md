@@ -51,6 +51,11 @@ Public ingress uses AWS ACM for ALB TLS and ExternalDNS with Route 53. cert-mana
 
 ## Architecture
 
+![Multi-Tenant Cloud Platform Architecture](docs/architecture-overview.png)
+
+<details>
+<summary><b>Click to view declarative Mermaid architecture flowchart</b></summary>
+
 ```mermaid
 flowchart TB
   user["End User / Browser"] --> r53["Route53 Hosted Zone (*.domain)"]
@@ -97,6 +102,7 @@ flowchart TB
   apiB -->|IRSA Role| s3b["tenant-b S3 Exports Bucket"]
   apiC -->|IRSA Role| s3c["tenant-c S3 Exports Bucket"]
 ```
+</details>
 
 ## Local Development
 

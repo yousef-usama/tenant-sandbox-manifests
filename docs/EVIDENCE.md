@@ -12,6 +12,12 @@ This document contains live verification results, terminal outputs, and security
 
 ---
 
+## Architecture Overview
+
+![Multi-Tenant Cloud Platform Architecture](architecture-overview.png)
+
+---
+
 ## 1. Verification Matrix
 
 | Component / Requirement | Validation Check | Live Status | Evidence Section |
