@@ -662,3 +662,75 @@ Trivy Scan Results:
 
 **Remediation**: Upgraded Dockerfile builder image to `golang:1.24-alpine` (and verified `golang:1.23.4+`), ensuring that all compiled binaries contain patched stdlib dependencies and achieve 0 vulnerabilities in Trivy security scans.
 
+---
+
+### 8.12 GitHub Actions Trivy Pipeline Failure: CVE-2026-63209 & CVE-2026-111943 (Run 39623610689)
+
+**Failure Log** (GitHub Actions CI workflow `app-release`, run `39623610689`):
+```text
+build-scan-push Run aquasecurity/trivy-action@v0.36.0
+│ Library                       │ Vulnerability   │ Severity │ Status │ Installed Version │ Fixed Version   │
+├───────────────────────────────┼─────────────────┼──────────┼────────┼───────────────────┼─────────────────┤
+│ github.com/klauspost/compress │ CVE-2026-63209  │ HIGH     │ fixed  │ v1.17.9           │ 1.18.7          │
+│ stdlib                        │ CVE-2026-111943 │ HIGH     │ fixed  │ v1.27.2           │ 1.26.10, 1.27.3 │
+##[error]Process completed with exit code 1.
+```
+
+**Root Cause**: The project's automated release pipeline enforces strict security gates requiring 0 HIGH/CRITICAL CVEs before allowing images to be pushed to Amazon ECR. Pushing the interactive UI feature included an indirect dependency `github.com/klauspost/compress@v1.17.9` (vulnerable to dictionary integer overflow) and used Go builder `1.27.2` (vulnerable in crypto/x509).
+
+**Remediation**:
+1. Upgraded `github.com/klauspost/compress` to `v1.20.3` via `go get` in `apps/feedback-api/go.mod`.
+2. Bumped builder base image to `golang:1.27.3-bookworm` in `apps/feedback-api/Dockerfile`.
+3. Pushed commit `2c81a22`, resulting in a green CI release run (`39624633833`).
+
+---
+
+### 8.13 Ephemeral Diagnostic Pods Blocked by PodSecurity `restricted:latest`
+
+**Failure Log**:
+```text
+$ kubectl run probe-net --namespace=tenant-a --rm -i --restart=Never --image=curlimages/curl ...
+Error from server (Forbidden): pods "probe-net" is forbidden: violates PodSecurity "restricted:latest": 
+  allowPrivilegeEscalation != false (container "probe-net" must set securityContext.allowPrivilegeEscalation=false), 
+  unrestricted capabilities (container "probe-net" must set securityContext.capabilities.drop=["ALL"]), 
+  runAsNonRoot != true (pod or container "probe-net" must set securityContext.runAsNonRoot=true), 
+  seccompProfile (pod or container "probe-net" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+```
+
+**Root Cause**: Tenant namespaces are configured with Kubernetes PodSecurity Admission `pod-security.kubernetes.io/enforce: restricted`. Launching standard ephemeral diagnostic containers without an explicitly hardened `securityContext` triggers instantaneous admission denial by the Kubernetes API server.
+
+**Remediation**: Configured diagnostic probe manifests with compliant `securityContext` overrides:
+```json
+{
+  "spec": {
+    "securityContext": {
+      "runAsNonRoot": true,
+      "runAsUser": 10001,
+      "seccompProfile": { "type": "RuntimeDefault" }
+    },
+    "containers": [{
+      "securityContext": {
+        "allowPrivilegeEscalation": false,
+        "capabilities": { "drop": ["ALL"] }
+      }
+    }]
+  }
+}
+```
+
+---
+
+### 8.14 Ephemeral AWS CLI Non-Root Home Directory Write Error (`/.aws`)
+
+**Failure Log**:
+```text
+$ kubectl run probe-s3 --namespace=tenant-a --rm -i --image=amazon/aws-cli:latest ...
+aws: [ERROR]: [Errno 13] Permission denied: '/.aws'
+pod tenant-a/probe-s3 terminated (Error)
+```
+
+**Root Cause**: Under `restricted` PodSecurity, containers must run as a non-root UID (e.g. UID 1000). The official AWS CLI defaults its home directory to `/`, which is root-owned and read-only. When the CLI attempted to initialize local files in `/.aws`, it crashed with an `Errno 13 Permission denied`.
+
+**Remediation**: Injected `HOME=/tmp` environment variable and mounted a writable Kubernetes `emptyDir` scratch volume at `/tmp`, allowing the CLI to run securely as an unprivileged user.
+
+

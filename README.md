@@ -313,6 +313,37 @@ A critical part of deploying enterprise Kubernetes platforms is handling real-wo
 
 ---
 
+### Incident 13: GitHub Actions CI Pipeline Failure — Trivy Security Gate (`CVE-2026-63209` & `CVE-2026-111943`)
+
+- **Symptoms & Error** (GitHub Actions Run `39623610689`, workflow `app-release`):
+  ```text
+  │ Library                       │ Vulnerability   │ Severity │ Status │ Installed Version │ Fixed Version   │ Title                                                         │
+  ├───────────────────────────────┼─────────────────┼──────────┼────────┼───────────────────┼─────────────────┼───────────────────────────────────────────────────────────────┤
+  │ github.com/klauspost/compress │ CVE-2026-63209  │ HIGH     │ fixed  │ v1.17.9           │ 1.18.7          │ Denial of Service via integer overflow in dict processing     │
+  │ stdlib                        │ CVE-2026-111943 │ HIGH     │ fixed  │ v1.27.2           │ 1.26.10, 1.27.3 │ crypto/x509: mitigation for security concerns with certs      │
+  ##[error]Process completed with exit code 1.
+  ```
+- **Root Cause Analysis (RCA)**: The CI/CD release workflow enforces strict zero-vulnerability container scanning via `aquasecurity/trivy-action@v0.36.0` (`exit-code: 1` on `HIGH,CRITICAL`). The Go dependencies bundled an older `github.com/klauspost/compress` (`v1.17.9`), and the builder image used `golang:1.27.2-bookworm`, triggering an immediate CI pipeline failure upon pushing the Web UI feature branch.
+- **Resolution**:
+  1. Ran `go get github.com/klauspost/compress@v1.20.3` and updated `go.mod` / `go.sum`.
+  2. Bumped builder base image in `apps/feedback-api/Dockerfile` from `golang:1.27.2-bookworm` to `golang:1.27.3-bookworm`.
+  3. Committed fix (`2c81a22`), re-triggered CI pipeline, and achieved 100% clean 0-vulnerability scan pass.
+
+---
+
+### Incident 14: Non-Root Ephemeral AWS CLI Filesystem Permission Failure (`/.aws`)
+
+- **Symptoms & Error**:
+  ```text
+  $ kubectl run probe-s3 --namespace=tenant-a --rm -i --image=amazon/aws-cli:latest ...
+  aws: [ERROR]: [Errno 13] Permission denied: '/.aws'
+  pod tenant-a/probe-s3 terminated (Error)
+  ```
+- **Root Cause Analysis (RCA)**: To comply with PodSecurity `restricted:latest`, the AWS CLI diagnostic container was executed with `runAsNonRoot: true` and `runAsUser: 1000`. By default, the AWS CLI defaults `HOME` to `/`, which is root-owned and read-only for non-root users. When the CLI attempted to initialize its local configuration/credentials cache, it crashed with `Permission denied`.
+- **Resolution**: Injected environment variable `HOME=/tmp` and attached a writable Kubernetes `emptyDir` scratch volume mounted at `/tmp`.
+
+---
+
 ## 📸 Live Visual Evidence & Screenshots
 
 All screenshots below were captured from the live deployment:
