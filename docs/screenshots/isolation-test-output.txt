@@ -1,0 +1,52 @@
+=================================================================
+ Multi-Tenant Isolation Live Verification Script
+ Date: 2026-10-22T16:14:03Z
+=================================================================
+
+[Test 1] Network Isolation: Pod in 'tenant-a' attempting cross-namespace
+         connection to feedback-api in 'tenant-b' (TCP:8080)...
+Expected: Connection timed out (NetworkPolicy drops cross-namespace packets)
+-----------------------------------------------------------------
+* Host feedback-api.tenant-b.svc.cluster.local:8080 was resolved.
+* IPv6: (none)
+* IPv4: 172.20.195.10
+*   Trying 172.20.195.10:8080...
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+* Connection timed out after 5001 milliseconds
+* closing connection #0
+curl: (28) Connection timed out after 5001 milliseconds
+pod "probe-net-test" deleted from tenant-a namespace
+pod tenant-a/probe-net-test terminated (Error)
+
+>>> [PASS] NetworkPolicy strictly BLOCKED cross-namespace traffic! (Code 28)
+
+=================================================================
+[Test 2] Storage Isolation: Pod in 'tenant-a' attempting cross-tenant
+         access to S3 bucket 'tenant-sandbox-tenant-b-exports'...
+Expected: AccessDenied (IAM IRSA restricts access to tenant-a bucket only)
+-----------------------------------------------------------------
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the ListObjectsV2 operation: User: arn:aws:sts::339712755065:assumed-role/tenant-sandbox-tenant-a-app/botocore-session-1792685659 is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::tenant-sandbox-tenant-b-exports" because no identity-based policy allows the s3:ListBucket action
+pod "probe-s3-test" deleted from tenant-a namespace
+pod tenant-a/probe-s3-test terminated (Error)
+
+>>> [PASS] IAM IRSA strictly BLOCKED cross-tenant S3 access! (HTTP 403 AccessDenied)
+
+=================================================================
+[Test 3] S3 Legitimate Access: Pod in 'tenant-a' accessing its OWN bucket
+         'tenant-sandbox-tenant-a-exports'...
+Expected: 200 OK / Objects listed
+-----------------------------------------------------------------
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+                           PRE exports/
+pod "probe-s3-own-test" deleted from tenant-a namespace
+
+>>> [PASS] IAM IRSA successfully authorized access to tenant's OWN S3 bucket!
+
+=================================================================
+ All Isolation Verifications Completed.
+=================================================================

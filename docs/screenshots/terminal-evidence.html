@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Evidence Terminal Output</title>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 24px;
+      margin: 0;
+    }
+    .window {
+      background-color: #111827;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .title-bar {
+      background-color: #1f2937;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #374151;
+    }
+    .dots {
+      display: flex;
+      gap: 8px;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot-red { background-color: #ef4444; }
+    .dot-yellow { background-color: #f59e0b; }
+    .dot-green { background-color: #10b981; }
+    .title {
+      flex: 1;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #9ca3af;
+      padding-right: 48px;
+    }
+    .term-body {
+      padding: 18px 20px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .cmd { color: #38bdf8; font-weight: 700; }
+    .pass { color: #34d399; font-weight: 700; }
+    .err { color: #f87171; font-weight: 700; }
+    .warn { color: #fbbf24; }
+    .meta { color: #94a3b8; }
+    .header-box {
+      border: 1px solid #38bdf8;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      background: rgba(56, 189, 248, 0.05);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="window">
+    <div class="title-bar">
+      <div class="dots"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span></div>
+      <div class="title">terminal &mdash; kubectl & AWS Infrastructure Verification</div>
+    </div>
+    <div class="term-body"><span class="cmd">$ kubectl get nodes -o wide</span>
+NAME                                            STATUS   ROLES    AGE   VERSION                INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                        KERNEL-VERSION                    CONTAINER-RUNTIME
+ip-10-40-10-203.eu-central-1.compute.internal   Ready    &lt;none&gt;   65m   v1.31.14-eks-117f323   10.40.10.203   &lt;none&gt;        Amazon Linux 2023.12.20261016   6.1.188-233.393.amzn2023.x86_64   containerd://2.3.5+unknown
+ip-10-40-11-149.eu-central-1.compute.internal   Ready    &lt;none&gt;   65m   v1.31.14-eks-117f323   10.40.11.149   &lt;none&gt;        Amazon Linux 2023.12.20261016   6.1.188-233.393.amzn2023.x86_64   containerd://2.3.5+unknown
+ip-10-40-12-226.eu-central-1.compute.internal   Ready    &lt;none&gt;   65m   v1.31.14-eks-117f323   10.40.12.226   &lt;none&gt;        Amazon Linux 2023.12.20261016   6.1.188-233.393.amzn2023.x86_64   containerd://2.3.5+unknown
+
+<span class="cmd">$ kubectl get ingress -A</span>
+NAMESPACE   NAME           CLASS   HOSTS                                                        ADDRESS                                                                 PORTS     AGE
+tenant-a    feedback-api   alb     tenant-a.yousef-usama-cloud.click,yousef-usama-cloud.click   k8s-tenantsandbox-7b33b51f09-527688557.eu-central-1.elb.amazonaws.com   80, 443   49m
+tenant-b    feedback-api   alb     tenant-b.yousef-usama-cloud.click                            k8s-tenantsandbox-7b33b51f09-527688557.eu-central-1.elb.amazonaws.com   80, 443   49m
+tenant-c    feedback-api   alb     tenant-c.yousef-usama-cloud.click                            k8s-tenantsandbox-7b33b51f09-527688557.eu-central-1.elb.amazonaws.com   80, 443   49m
+
+<span class="cmd">$ kubectl get applications -n argocd</span>
+NAME                      SYNC STATUS   HEALTH STATUS
+cert-manager              <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+external-dns              <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+external-secrets          <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+external-secrets-config   <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+falco                     <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+grafana-dashboards        <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+monitoring                <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+storage                   <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+tenant-a                  <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+tenant-b                  <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+tenant-c                  <span class="pass">Synced</span>        <span class="pass">Healthy</span>
+tenant-sandbox-root       <span class="pass">Synced</span>        <span class="pass">Healthy</span></div>
+  </div>
+
+  <div class="window">
+    <div class="title-bar">
+      <div class="dots"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span></div>
+      <div class="title">terminal &mdash; ./scripts/verify-live-isolation.sh (Multi-Tenant Isolation Probes)</div>
+    </div>
+    <div class="term-body"><span class="cmd">$ ./scripts/verify-live-isolation.sh</span>
+=================================================================
+ Multi-Tenant Isolation Live Verification Script
+=================================================================
+
+<span class="warn">[Test 1] Network Isolation: Pod in 'tenant-a' attempting cross-namespace
+         connection to feedback-api in 'tenant-b' (TCP:8080)...</span>
+Expected: Connection timed out (NetworkPolicy drops cross-namespace packets)
+-----------------------------------------------------------------
+* Host feedback-api.tenant-b.svc.cluster.local:8080 was resolved.
+* IPv6: (none)
+* IPv4: 172.20.195.10
+*   Trying 172.20.195.10:8080...
+<span class="err">* Connection timed out after 5001 milliseconds</span>
+* closing connection #0
+<span class="err">curl: (28) Connection timed out after 5001 milliseconds</span>
+pod "probe-net-test" deleted from tenant-a namespace
+
+<span class="pass">&gt;&gt;&gt; [PASS] NetworkPolicy strictly BLOCKED cross-namespace traffic! (Code 28)</span>
+
+=================================================================
+<span class="warn">[Test 2] Storage Isolation: Pod in 'tenant-a' attempting cross-tenant
+         access to S3 bucket 'tenant-sandbox-tenant-b-exports'...</span>
+Expected: AccessDenied (IAM IRSA restricts access to tenant-a bucket only)
+-----------------------------------------------------------------
+<span class="err">aws: [ERROR]: An error occurred (AccessDenied) when calling the ListObjectsV2 operation:
+User: arn:aws:sts::339712755065:assumed-role/tenant-sandbox-tenant-a-app/botocore-session is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::tenant-sandbox-tenant-b-exports" because no identity-based policy allows the s3:ListBucket action</span>
+pod "probe-s3-test" deleted from tenant-a namespace
+
+<span class="pass">&gt;&gt;&gt; [PASS] IAM IRSA strictly BLOCKED cross-tenant S3 access! (HTTP 403 AccessDenied)</span>
+
+=================================================================
+<span class="warn">[Test 3] S3 Legitimate Access: Pod in 'tenant-a' accessing its OWN bucket
+         'tenant-sandbox-tenant-a-exports'...</span>
+Expected: 200 OK / Objects listed
+-----------------------------------------------------------------
+                           <span class="pass">PRE exports/</span>
+pod "probe-s3-own-test" deleted from tenant-a namespace
+
+<span class="pass">&gt;&gt;&gt; [PASS] IAM IRSA successfully authorized access to tenant's OWN S3 bucket!</span>
+
+=================================================================
+ <span class="pass">All Isolation Verifications Completed Successfully.</span>
+=================================================================</div>
+  </div>
+
+</body>
+</html>

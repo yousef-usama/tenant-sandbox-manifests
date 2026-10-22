@@ -263,6 +263,75 @@ A critical part of deploying enterprise Kubernetes platforms is handling real-wo
 
 ---
 
+### Incident 9: NAT Instance Heredoc Shebang Indentation & Amazon Linux 2023 Packet Forwarding
+
+- **Symptoms & Error**:
+  ```text
+  [cloud-init] Exec format error: /var/lib/cloud/instance/scripts/part-001
+  [cloud-init] Failed to run module scripts-user (scripts in /var/lib/cloud/instance/scripts)
+  ```
+- **Root Cause Analysis (RCA)**: Terraform's `<<-USERDATA` heredoc strips leading indentation based on the *least-indented* non-empty line. An inner line at column 0 caused `#!/bin/bash` to keep 4 leading spaces, triggering `ENOEXEC` (Exec format error). Additionally, AL2023 `systemd-networkd` resets `net.ipv4.ip_forward` on interface events unless configured in the network unit.
+- **Resolution**: Aligned all lines to column 0, provisioned `/etc/systemd/network/80-ec2.network.d/nat.conf` with `[Network] IPForward=yes`, and applied persistent `iptables -t nat -A POSTROUTING -o enX0 -j MASQUERADE`.
+
+---
+
+### Incident 10: Docker Multi-Architecture Platform Mismatch on Apple Silicon (`arm64` vs `amd64`)
+
+- **Symptoms & Error**:
+  ```text
+  Warning Failed kubelet Error: ImagePullBackOff
+  exec /server: exec format error / no match for platform in manifest: not found
+  ```
+- **Root Cause Analysis (RCA)**: Building Docker images directly on Apple Silicon defaults to `linux/arm64`. The EKS spot worker nodes run on `x86_64` (AMD64) architecture, failing to execute the ARM binary.
+- **Resolution**: Explicitly built and pushed multi-architecture images targeting AMD64 via Buildx:
+  `docker buildx build --platform linux/amd64 -t $ECR_REPO:$IMAGE_TAG --push apps/feedback-api/`.
+
+---
+
+### Incident 11: ECR Immutable Tag Collision on Rebuild
+
+- **Symptoms & Error**:
+  ```text
+  Tag invalid: The image tag '...' already exists in the 'tenant-sandbox/feedback-api' repository 
+  and the repository is configured for immutable tags.
+  ```
+- **Root Cause Analysis (RCA)**: ECR tag immutability prevents overwriting an existing image tag. When replacing a failed build for the same git commit, direct re-pushes are rejected.
+- **Resolution**: Orchestrated explicit pre-push deletion of the target tag:
+  `aws ecr batch-delete-image --repository-name tenant-sandbox/feedback-api --image-ids imageTag=$COMMIT_SHA`.
+
+---
+
+### Incident 12: Ephemeral Diagnostic Pods Blocked by PodSecurity `restricted:latest`
+
+- **Symptoms & Error**:
+  ```text
+  Error from server (Forbidden): pods "probe-net" is forbidden: violates PodSecurity "restricted:latest": 
+  allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true
+  ```
+- **Root Cause Analysis (RCA)**: Running standard diagnostic containers (`kubectl run ... --image=curlimages/curl`) without security overrides violates the enforced PSA `restricted` admission standard on tenant namespaces.
+- **Resolution**: Structured diagnostic probe pods with explicit compliant `securityContext` overrides (`runAsNonRoot: true`, `runAsUser: 10001`, `allowPrivilegeEscalation: false`, `capabilities: { drop: ["ALL"] }`, `seccompProfile: RuntimeDefault`), proving both admission enforcement and network/storage isolation.
+
+---
+
+## 📸 Live Visual Evidence & Screenshots
+
+All screenshots below were captured from the live deployment:
+
+| Evidence Artifact | Description | Direct Link |
+| :--- | :--- | :--- |
+| **Multi-Tenant Web UI** | Apex domain `https://yousef-usama-cloud.click` with tenant selector & voting | ![Apex UI](docs/screenshots/01-frontend-apex.png) |
+| **Tenant A UI** | Tenant A dedicated subdomain `https://tenant-a.yousef-usama-cloud.click` | ![Tenant A](docs/screenshots/02-frontend-tenant-a.png) |
+| **ArgoCD Control Plane** | 12/12 GitOps Applications fully Synced and Healthy | ![ArgoCD](docs/screenshots/03-argocd-applications.png) |
+| **Prometheus UI** | Scrape targets across nodes, workloads, and tenant pods | ![Prometheus](docs/screenshots/04-prometheus-targets.png) |
+| **Grafana Tenant Dashboard** | Tenant Sandbox real-time request rates, latency, and resource metrics | ![Grafana Tenant](docs/screenshots/05-grafana-tenant-sandbox.png) |
+| **Grafana Cluster Overview** | Kubernetes compute resources, CPU/Memory utilization, and node status | ![Grafana Cluster](docs/screenshots/06-grafana-k8s-cluster.png) |
+| **Terminal Isolation Proof** | NetworkPolicy timeout (code 28) & IAM IRSA S3 AccessDenied (HTTP 403) | ![Terminal Proof](docs/screenshots/07-terminal-isolation-and-cluster.png) |
+
+Detailed verification commands and raw terminal logs are available in [`docs/EVIDENCE.md`](docs/EVIDENCE.md).
+
+
+---
+
 ## Cost Notes
 
 This repo intentionally uses in-cluster Postgres per tenant to avoid RDS cost during a one-shot portfolio demo. Data persistence uses PVCs, but the database setup is deliberately lightweight.
